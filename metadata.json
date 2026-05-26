@@ -1,0 +1,6 @@
+{
+  "name": "Standard Gold Assay Portal",
+  "description": "Gold and silver assaying and laboratory inquiry services.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
