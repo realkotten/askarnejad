@@ -1,55 +1,74 @@
 import { AssayCertificate } from '../types';
-import { mockCertificates } from '../data';
+import { db } from './firebase';
+import { doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 
-const STORAGE_KEY = 'askarnejad_certificates';
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
 
-// Initialize the database with mock certificates as the initial seed if storage is empty
-const getStoredCertificates = (): Record<string, AssayCertificate> => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(mockCertificates));
-    return mockCertificates;
-  }
-  try {
-    return JSON.parse(stored);
-  } catch (e) {
-    console.error('Error parsing certificates from localStorage, resetting to mock data', e);
-    return mockCertificates;
-  }
-};
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+const COLLECTION_NAME = 'certificates';
 
 export const dbService = {
-  // Query certificate by hallmark ID (case insensitive search)
-  getCertificate: (id: string): AssayCertificate | null => {
-    const certs = getStoredCertificates();
+  getCertificate: async (id: string): Promise<AssayCertificate | null> => {
     const cleanId = id.trim().toUpperCase();
-    return certs[cleanId] || null;
-  },
-
-  // Save new or update existing certificate
-  saveCertificate: (cert: AssayCertificate): void => {
-    const certs = getStoredCertificates();
-    const cleanId = cert.id.trim().toUpperCase();
-    certs[cleanId] = {
-      ...cert,
-      id: cleanId, // Enforce uppercase key
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(certs));
-  },
-
-  // Delete a certificate
-  deleteCertificate: (id: string): void => {
-    const certs = getStoredCertificates();
-    const cleanId = id.trim().toUpperCase();
-    if (certs[cleanId]) {
-      delete certs[cleanId];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(certs));
+    try {
+      const docRef = doc(db, COLLECTION_NAME, cleanId);
+      const docSnap = await getDoc(docRef);
+      return docSnap.exists() ? (docSnap.data() as AssayCertificate) : null;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, COLLECTION_NAME + '/' + cleanId);
     }
   },
 
-  // List all certificates sorted by date/ID
-  getAllCertificates: (): AssayCertificate[] => {
-    const certs = getStoredCertificates();
-    return Object.values(certs).sort((a, b) => b.id.localeCompare(a.id));
+  saveCertificate: async (cert: AssayCertificate): Promise<void> => {
+    const cleanId = cert.id.trim().toUpperCase();
+    try {
+      await setDoc(doc(db, COLLECTION_NAME, cleanId), {
+        ...cert,
+        id: cleanId,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, COLLECTION_NAME + '/' + cleanId);
+    }
+  },
+
+  deleteCertificate: async (id: string): Promise<void> => {
+    const cleanId = id.trim().toUpperCase();
+    try {
+      await deleteDoc(doc(db, COLLECTION_NAME, cleanId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, COLLECTION_NAME + '/' + cleanId);
+    }
+  },
+
+  getAllCertificates: async (): Promise<AssayCertificate[]> => {
+    try {
+      const querySnapshot = await getDocs(collection(db, COLLECTION_NAME));
+      return querySnapshot.docs.map(doc => doc.data() as AssayCertificate)
+        .sort((a, b) => b.id.localeCompare(a.id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, COLLECTION_NAME);
+    }
   }
 };

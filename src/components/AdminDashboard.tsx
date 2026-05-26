@@ -74,14 +74,20 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadCertificates();
-      resetForm();
-    }
+    (async () => {
+      if (isAuthenticated) {
+        await loadCertificates();
+        resetForm();
+      }
+    })();
   }, [isAuthenticated]);
 
-  const loadCertificates = () => {
-    setCertificates(dbService.getAllCertificates());
+  const loadCertificates = async () => {
+    try {
+      setCertificates(await dbService.getAllCertificates());
+    } catch (e) {
+      console.error('Failed to load certificates', e);
+    }
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -115,7 +121,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     setImportError('');
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const text = event.target?.result as string;
         const importedData = JSON.parse(text);
@@ -134,17 +140,17 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
           throw new Error('فایل انتخاب شده حاوی اطلاعات معتبر شناسنامه نمی‌باشد.');
         }
 
-        importedList.forEach(cert => {
+        for (const cert of importedList) {
           const cleanId = (cert.id || cert.certificateNo).trim().toUpperCase();
           const normalized: AssayCertificate = {
             ...cert,
             id: cleanId,
           };
-          dbService.saveCertificate(normalized);
-        });
+          await dbService.saveCertificate(normalized);
+        }
 
         setImportSuccess(`تعداد ${farsiDigits(importedList.length)} شناسنامه با موفقیت وارد پایگاه داده گردید.`);
-        loadCertificates();
+        await loadCertificates();
         
         setTimeout(() => {
           setImportSuccess('');
@@ -207,7 +213,7 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     setPacketNumber('');
   };
 
-  const handleAddCertificate = (e: React.FormEvent) => {
+  const handleAddCertificate = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     setFormSuccess('');
@@ -220,9 +226,12 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     const cleanId = hallmarkId.trim().toUpperCase();
 
     // Verify if it exists when creating new (not editing)
-    if (!editModeId && dbService.getCertificate(cleanId)) {
-      setFormError(`کد انگ ${cleanId} از قبل در پایگاه داده وجود دارد.`);
-      return;
+    if (!editModeId) {
+      const existing = await dbService.getCertificate(cleanId);
+      if (existing) {
+        setFormError(`کد انگ ${cleanId} از قبل در پایگاه داده وجود دارد.`);
+        return;
+      }
     }
 
     const testedPurityNum = typeof testedPurity === 'number' ? testedPurity : parseFloat(toEnglishDigits(testedPurity.toString())) || 0;
@@ -268,14 +277,18 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       packetNumber
     };
 
-    dbService.saveCertificate(newCert);
-    setFormSuccess(editModeId ? 'اطلاعات گواهی با موفقیت بروزرسانی شد.' : 'اطلاعات طلای تست شده با موفقیت در دیتابیس ذخیره شد.');
-    loadCertificates();
-    
-    setTimeout(() => {
-      setFormSuccess('');
-      resetForm();
-    }, 2000);
+    try {
+      await dbService.saveCertificate(newCert);
+      setFormSuccess(editModeId ? 'اطلاعات گواهی با موفقیت بروزرسانی شد.' : 'اطلاعات طلای تست شده با موفقیت در دیتابیس ذخیره شد.');
+      await loadCertificates();
+      
+      setTimeout(() => {
+        setFormSuccess('');
+        resetForm();
+      }, 2000);
+    } catch (e) {
+      setFormError('خطا در ذخیره اطلاعات. لطفا دوباره تلاش کنید.');
+    }
   };
 
   const handleEdit = (cert: AssayCertificate) => {
@@ -316,10 +329,14 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     document.getElementById('admin-form-container')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm(`آیا از حذف دائم اطلاعات کد انگ ${id} از دیتابیس مراجعین آزمایشگاه اطمینان دارید؟`)) {
-      dbService.deleteCertificate(id);
-      loadCertificates();
+      try {
+        await dbService.deleteCertificate(id);
+        await loadCertificates();
+      } catch (e) {
+        console.error('Failed to delete', e);
+      }
     }
   };
 
@@ -782,10 +799,10 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
                             <span className="text-[10px] text-red-400 font-bold px-1.5 font-sans">حذف؟</span>
                             <button
                               type="button"
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                dbService.deleteCertificate(cert.id);
-                                loadCertificates();
+                                await dbService.deleteCertificate(cert.id);
+                                await loadCertificates();
                                 setDeleteConfirmId(null);
                               }}
                               className="w-6 h-6 rounded bg-red-600 hover:bg-red-500 text-white flex items-center justify-center transition-all cursor-pointer"

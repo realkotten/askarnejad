@@ -17,7 +17,7 @@ export default function HallmarkInquiry({ onCertificateFound }: HallmarkInquiryP
   const [searchedCode, setSearchedCode] = useState('');
   const [showPhone, setShowPhone] = useState(false);
 
-  const handleInquiry = (e: React.FormEvent) => {
+  const handleInquiry = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) {
       setError('لطفاً شماره انگ یا کد شناسنامه را وارد کنید.');
@@ -30,22 +30,22 @@ export default function HallmarkInquiry({ onCertificateFound }: HallmarkInquiryP
     setShowNotFound(false);
     setError('');
 
-    // Simulate laboratory database search
-    setTimeout(() => {
+    try {
       const cleanKey = query.trim().toUpperCase();
-      const cert = dbService.getCertificate(cleanKey);
+      const cert = await dbService.getCertificate(cleanKey);
 
       if (!cert) {
         setSearchedCode(cleanKey);
         setShowNotFound(true);
-        setLoading(false);
-        return;
+      } else {
+        setFoundCert(cert);
+        onCertificateFound(cert);
       }
-
-      setFoundCert(cert);
-      onCertificateFound(cert);
+    } catch (err) {
+      setError('خطایی در ارتباط با دیتابیس رخ داد.');
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   const clearInquiry = () => {
