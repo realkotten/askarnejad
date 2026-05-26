@@ -234,10 +234,10 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
       }
     }
 
-    const testedPurityNum = typeof testedPurity === 'number' ? testedPurity : parseFloat(toEnglishDigits(testedPurity.toString())) || 0;
-    const weightNum = typeof weight === 'number' ? weight : parseFloat(toEnglishDigits(weight.toString())) || 0;
+    const testedPurityNum = parseFloat(toEnglishDigits(testedPurity.toString()));
+    const weightNum = parseFloat(toEnglishDigits(weight.toString()));
 
-    if (testedPurityNum <= 0 || weightNum <= 0) {
+    if (isNaN(testedPurityNum) || testedPurityNum <= 0 || isNaN(weightNum) || weightNum <= 0) {
       setFormError('لطفاً عیار سنجیده شده و وزن کالا را به عنوان عدد معتبر وارد کنید.');
       return;
     }
